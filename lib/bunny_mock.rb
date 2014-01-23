@@ -1,23 +1,54 @@
 class BunnyMock
 
+  @default_channel = nil
+
   def start
     :connected
   end
 
-  def qos
-    :qos_ok
+  def nil?
+    false
   end
 
-  def stop
-    nil
+  def open?
+    true
   end
 
-  def queue(*attrs)
-    BunnyMock::Queue.new(*attrs)
+  def close; end
+
+  def create_channel(*attrs)
+    @default_channel = BunnyMock::Channel.new(*attrs) if @default_channel.nil?
+    @default_channel
+  end
+
+  def queue(name, *attrs)
+    @default_channel.queue(name, *attrs)
   end
 
   def exchange(*attrs)
-    BunnyMock::Exchange.new(*attrs)
+    @default_channel.exchange(*attrs)
+  end
+
+  class Channel
+    @queues
+
+    def initialize(*attrs)
+      # TODO
+      @queues = Hash.new
+    end
+
+    def prefetch(message_count)
+      # TODO
+    end
+
+    def queue(name, *attrs)
+      @queues[name] = BunnyMock::Queue.new(name, *attrs) if @queues[name].nil?
+      @queues[name]
+    end
+
+    def exchange(*attrs)
+      BunnyMock::Queue.new(*attrs)
+    end
   end
 
   class Consumer
@@ -30,9 +61,9 @@ class BunnyMock
   class Queue
     attr_accessor :name, :attrs, :messages, :delivery_count
     def initialize(name, attrs = {})
-      self.name           = name
-      self.attrs          = attrs.dup
-      self.messages       = []
+      self.name = name
+      self.attrs = attrs.dup
+      self.messages = []
       self.delivery_count = 0
     end
 
@@ -53,20 +84,20 @@ class BunnyMock
     end
 
     # NOTE: This is NOT a method that is supported on real Bunny queues.
-    #       This is a custom method to get us a deep copy of
-    #       all the messages currently in the queue. This is provided
-    #       to aid in testing a system where it is not practical for the
-    #       test to subscribe to the queue and read the messages, but we
-    #       need to verify that certain messages have been published.
+    # This is a custom method to get us a deep copy of
+    # all the messages currently in the queue. This is provided
+    # to aid in testing a system where it is not practical for the
+    # test to subscribe to the queue and read the messages, but we
+    # need to verify that certain messages have been published.
     def snapshot_messages
       Marshal.load(Marshal.dump(messages))
     end
 
     def method_missing(method, *args)
-      method_name  = method.to_s
+      method_name = method.to_s
       is_predicate = false
       if method_name =~ /^(.*)\?$/
-        key           = $1.to_sym
+        key = $1.to_sym
         is_predicate = true
       else
         key = method.to_sym
@@ -79,13 +110,17 @@ class BunnyMock
         super
       end
     end
+
+    def publish(msg, msg_attrs = {})
+      self.messages << msg
+    end
   end
 
   class Exchange
     attr_accessor :name, :attrs, :queues
     def initialize(name, attrs = {})
-      self.name   = name
-      self.attrs  = attrs.dup
+      self.name = name
+      self.attrs = attrs.dup
       self.queues = []
     end
 
@@ -98,10 +133,10 @@ class BunnyMock
     end
 
     def method_missing(method, *args)
-      method_name  = method.to_s
+      method_name = method.to_s
       is_predicate = false
       if method_name =~ /^(.*)\?$/
-        key           = $1.to_sym
+        key = $1.to_sym
         is_predicate = true
       else
         key = method.to_sym
